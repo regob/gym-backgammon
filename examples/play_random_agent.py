@@ -21,7 +21,7 @@ class RandomAgent:
         return random.choice(list(actions)) if actions else None
 
 
-def make_plays():
+def make_plays(n_games=1):
     wins = {WHITE: 0, BLACK: 0}
 
     agents = {WHITE: RandomAgent(WHITE), BLACK: RandomAgent(BLACK)}
@@ -32,19 +32,19 @@ def make_plays():
 
     t = time.time()
 
-    env.render()
+    # env.render()
 
     game_idx = 1
     for i in count():
         roll = info["roll"]
 
-        print("Current player={} ({} - {}) | Roll={}".format(agent.color, TOKEN[agent.color], COLORS[agent.color], roll))
+        # print("Current player={} ({} - {}) | Roll={}".format(agent.color, TOKEN[agent.color], COLORS[agent.color], roll))
         actions = env.get_valid_actions()
-        print(actions)
+        #print(actions)
         action = agent.choose_best_action(actions, env)
 
         observation_next, reward, terminated, truncated, info = env.step(action)
-        env.render()
+        #env.render()
 
         if terminated:
             wins[agent_color] += 1
@@ -60,7 +60,8 @@ def make_plays():
 
         if terminated or truncated:
             game_idx += 1
-            break
+            if game_idx > n_games:
+                break
             observation, info = env.reset()
         else:
             observation = observation_next
@@ -72,4 +73,7 @@ def make_plays():
 
 
 if __name__ == '__main__':
-    make_plays()
+    start_t = time.time()
+    N = 100
+    make_plays(N)
+    print(f"{N=} games took: {time.time() - start_t:.4f} s")
