@@ -83,9 +83,9 @@ if __name__ == '__main__':
     # np.random.seed(0)
 
     start_t = time.time()
-    N = 20000
+    N = 10000
     agent1 = RandomAgent(0)
-    agent2 = LearningAgent(1, env.observation_space.shape, lr=0.0005, eps=0.05, maxlen=300)
+    agent2 = LearningAgent(1, env.observation_space.shape, lr=0.00005, eps=0.1, maxlen=300, gamma=0.7, init_rounds=100)
 #    agent2.load_state()
     make_plays(agent1, agent2, N, 1)
     agent2.save_state()
