@@ -1,3 +1,4 @@
+import sys
 import random
 import math
 from collections import deque
@@ -7,53 +8,63 @@ from torch import functional as F
 from gym_backgammon.envs.backgammon_env import BackgammonEnv
 from gym_backgammon.envs.backgammon import WHITE, BLACK
 
+sys.path.append(__file__)
+from pubeval import pubeval
+from dumbeval import dumbeval
+
 
 class RandomAgent:
     def __init__(self, idx):
         self.idx = idx
         self.name = 'RandomAgent({})'.format(self.idx)
 
-    def choose_best_action(self, actions, observation, env):
+    def choose_best_action(self, actions, observation, env, training=False):
         return random.choice(list(actions)) if actions else None
 
-    def reward(self, r=None):
+    def next_game(self):
         pass
 
-    def next_game(self, color):
-        self.color = color
+class PolicyAgent:
+    def __init__(self, idx, policy_fn):
+        self.policy_fn = policy_fn
 
-MX = 220
-win_prob = np.ones((MX, MX), dtype=float)
-for i in range(MX):
-    for j in range(i, MX):
-        # compute [i][j]
-        total = 0.0
-        for k in range(36):
-            n1, n2 = k // 6 + 1, k % 6 + 1
-            col = i - n1 - n2 if n1 != n2 else i - (n1 + n2) * 2
-            if col <= 0:
-                total += 1.0
-            else:
-                total += 1.0 - win_prob[j, col]
-        win_prob[i, j] = total / 36
-
-        # compute [j, i]
-        total = 0.0
-        for k in range(36):
-            n1, n2 = k // 6 + 1, k % 6 + 1
-            col = j - n1 - n2 if n1 != n2 else j - (n1 + n2) * 2
-            if col <= 0:
-                total += 1.0
-            else:
-                total += 1.0 - win_prob[i, col]
-        win_prob[j, i] = total / 36
-# print(f"{win_prob[150, 200]=}")
-# print(f"{win_prob[219, 219]=}")
-# print(f"{win_prob[70, 36]=}")
-
+    def choose_best_action(self, actions, observation, env, training=False):
+        if len(actions) == 0:
+            return None
+        best_action, best_score = None, -1e9
+        saved_state = env.game.save_state()
         
+        for action in actions:
+            internal_action = tuple((env.internal_action_map[x], env.internal_action_map[y])
+                                        for x, y in action)
+            env.game.execute_play(env.current_agent, internal_action)
+            
+            # get the board after the move from the current player's perspective
+            board = env.game.get_board_pubeval(env.current_agent)
+            score = self.policy_fn(board)
+            
+            if score > best_score:
+                best_action, best_score = action, score
+            
+            env.game.restore_state(saved_state)
+
+        return best_action
+
+class DumbevalAgent(PolicyAgent):
+    def __init__(self, idx):
+        super().__init__(idx, dumbeval)
+        self.idx = idx
+        self.name = "DumbevalAgent({})".format(self.idx)
+
+class PubevalAgent(PolicyAgent):
+    def __init__(self, idx):
+        super().__init__(idx, pubeval)
+        self.idx = idx
+        self.name = "PubevalAgent({})".format(self.idx)
+        
+
 class LearningAgent:
-    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, maxlen=100, batch_size=8, gamma=0.7, init_rounds=100):
+    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, weight_decay=1e-6, debug=False):
         self.idx = idx
         self.observation_shape = observation_shape
         self.name = 'LearningAgent({})'.format(self.idx)
@@ -62,10 +73,10 @@ class LearningAgent:
 
         # input layer neurons
         self.n_input = math.prod(self.observation_shape)
-        # output layer neurons
-        self.n_out = 1
+        # output layer neurons (p_white wins, p_black wins)
+        self.n_out = 2
         # hidden layer neurons
-        self.n_hidden = 500
+        self.n_hidden = 100
 
         self.layer1 = torch.nn.Linear(self.n_input, self.n_hidden)
         self.layer2 = torch.nn.Linear(self.n_hidden, self.n_hidden)
@@ -75,141 +86,108 @@ class LearningAgent:
         torch.nn.init.xavier_normal_(self.layer3.weight)
 
         self.net = torch.nn.Sequential(
-            self.layer1, torch.nn.ReLU(),
-#            self.layer2, torch.nn.ReLU(),
+            self.layer1, torch.nn.ReLU(), # torch.nn.Dropout(0.3),
+            #            self.layer2, torch.nn.ReLU(),
             self.layer3, torch.nn.Sigmoid(),
         )
+        self.net.train()
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.net.to(self.device)
-        print(f"{self.n_input=}, {self.n_out=}")
+        print("LearningAgent uses network:", self.net)
 
-        self.maxlen = maxlen
-        self.observations = deque([], maxlen=self.maxlen)
-        self.saved_states = deque([], maxlen=self.maxlen)
-        self.scores = deque([], maxlen=self.maxlen)
-        self.optim = torch.optim.AdamW(self.net.parameters(), lr=self.lr, amsgrad=True)
+        self.optim = torch.optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9, weight_decay=weight_decay)
         self.optim.zero_grad()
-
-        self.batch_size = batch_size
-        self.gamma = gamma
-        self.init_rounds = init_rounds
+        self.loss = torch.nn.L1Loss()
 
         self.total_loss = 0.0
         self.num_turns = 0
-        self.num_rounds = 0
+        self.num_rounds = 1
+        self.exploration_move = False
+        self.debug = debug
 
+    def next_game(self):
+        self.total_loss, self.num_turns = 0.0, 0
+        self.num_rounds += 1
 
+    def weight_norm(self):
+        norm = 0.0
+        for p in self.net.parameters():
+            norm += p.detach().data.norm(2).item() ** 2
+        return norm ** 0.5
 
-    def next_game(self, color):
-        self.color = color
-
-    def choose_best_action(self, actions, observation, env: BackgammonEnv):
+    def choose_best_action(self, actions, observation, env: BackgammonEnv, training=True):
         saved_state = env.game.save_state()
         observation = torch.Tensor(observation)
 
-        is_white = self.color == WHITE
+        is_white = env.current_agent == WHITE
+        player_idx = 0 if is_white else 1
 
-        best_action, best_score = None, -1e9
+        best_action = None
+        self.exploration_move = False
+        
+        self.net.eval()
+
         if actions:
-            if random.random() < self.eps:
+            if training and random.random() < self.eps:
+                self.exploration_move = True
                 return random.choice(list(actions))
 
+            next_observations = []
             for action in actions:
                 internal_action = tuple((env.internal_action_map[x], env.internal_action_map[y])
                                         for x, y in action)
 
                 env.game.execute_play(env.current_agent, internal_action)
                 next_observation = torch.Tensor(env.game.get_board_features(env.game.get_opponent(env.current_agent)))
-                with torch.no_grad():
-                    score = self.net(next_observation.reshape(1, -1).to(self.device)).item()
-                    if not is_white:
-                        score = 1.0 - score
-                if score > best_score:
-                    best_action, best_score = action, score
+                next_observations.append(next_observation)
                 env.game.restore_state(saved_state)
 
-        with torch.no_grad():
-            score = self.net(observation.reshape(1, -1).to(self.device)).item()
-        if not is_white:
-            score = 1.0 - score
+            next_observations = torch.stack(next_observations)
+            with torch.no_grad():
+                scores = self.net(next_observations.to(self.device))[:, player_idx].reshape(-1)
 
-        self.scores.append(score)
-        self.saved_states.append(saved_state)
-        self.observations.append(observation)
+                best_action_idx = scores.argmax()
+                best_action = actions[best_action_idx]
+
+        if self.num_rounds % 100 == 0 and training and self.debug:
+            with torch.no_grad():
+                score = self.net(observation.reshape(1, -1).to(self.device))[0]
+            print("Agent", "WHITE" if is_white else "BLACK", score)
 
         return best_action
 
-    def reward(self, r=None):
-        if len(self.observations) < 2:
+    def step(self, observation, color, observation_next, reward=None):
+
+        if self.exploration_move:
             return
 
-        if self.num_rounds < self.init_rounds:
-            observation = self.observations[-1].reshape(-1)
-            
-            dist_white = 0.0
-            for i in range(96):
-                if i % 4 == 3:
-                    cnt = observation[i] * 2.0
-                else:
-                    cnt = observation[i]
-                dist_white += cnt * (24 - i // 4)
+        self.net.train()
 
-            dist_white += observation[96] * 2.0 * 25.0
+        observation_tensor = torch.Tensor(observation).reshape(1, -1).to(self.device)
+        observation_next_tensor = torch.Tensor(observation_next).reshape(1, -1).to(self.device)
 
-            dist_black = 0.0
-            for i in range(98, 194):
-                if i % 4 == 1:
-                    cnt = observation[i] * 2.0
-                else:
-                    cnt = observation[i]
-                dist_black += cnt * (24 - (i - 98) // 4)
-
-            dist_black += observation[194] * 2.0 * 25.0
-
-            dist_white = min(int(dist_white), MX - 1)
-            dist_black = min(int(dist_black), MX - 1)
-            p_white = win_prob[dist_white, dist_black] if observation[196] > 0.5 else 1 - win_prob[dist_black, dist_white]
-            score = self.net(observation.reshape(1, -1).to(self.device)).reshape(-1)
-            loss = torch.abs(score - p_white)
-            self.total_loss += loss.item()
-            self.num_turns += 1
-            self.optim.zero_grad()
-            loss.backward()
-            self.optim.step()
-
-            if r is not None:
-                print(f"Average loss ({self.num_turns} turns): {self.total_loss / self.num_turns}")
-                self.total_loss = 0
-                self.num_turns = 0
-                self.num_rounds += 1
-
-            return
-
-        if r is None:
-            return
-        next_score = r
-        i = 0
-        for observation in reversed(self.observations):
-            score = self.net(observation.reshape(1, -1).to(self.device)).reshape(-1)
-            if self.color != WHITE:
-                score = 1.0 - score
-            loss = torch.abs(next_score - score)
-            if i == 0:
-                i += 1
-                print(score, r)
-
-            self.optim.zero_grad()
-            loss.backward()
-            self.optim.step()
+        round_end = reward is not None
+        if reward is None:
             with torch.no_grad():
-                next_score = self.net(observation.reshape(1, -1).to(self.device)).reshape(-1)
+                reward = self.net(observation_next_tensor)
+        else:
+            reward = torch.FloatTensor([reward, 1.0 - reward]).reshape(1, -1).to(self.device)
 
+        prev_score = self.net(observation_tensor)
 
+        loss = self.loss(prev_score, reward)
+        loss.backward()
+        self.optim.step()
+        self.optim.zero_grad()
 
+        if round_end and self.debug:
+            with torch.no_grad():
+                better_score = self.net(observation_tensor).reshape(-1)
 
-        # for p in self.net.parameters():
-        #     if p.grad is not None:
-        #         p.grad *= self.gamma
+            print(list(prev_score.detach().cpu().numpy()), list(better_score.cpu().numpy()), reward)
+
+        self.total_loss += loss.item()
+        self.num_turns += 1
 
         # self.num_turns += 1
 
@@ -234,6 +212,7 @@ class LearningAgent:
 
     def save_state(self, path="learning_agent_state.pth"):
         torch.save(self.net.cpu().state_dict(), path)
+        self.net.to(self.device)
 
     def load_state(self, path="learning_agent_state.pth"):
         state_dict = torch.load(path)

@@ -1,78 +1,62 @@
-import gymnasium as gym
+import argparse
 import time
 from itertools import count
 import random
+import gymnasium as gym
 import numpy as np
+import torch
 
 from gym_backgammon.envs.backgammon import WHITE, BLACK, COLORS, TOKEN
-from agents import RandomAgent, LearningAgent
+from agents import RandomAgent, LearningAgent, PubevalAgent, DumbevalAgent
+from play_two_agents import play_two_agents
 
-def assign_agent_sides(agent1, agent2):
-    if random.random() > 0.5:
-        d = {WHITE: agent1, BLACK: agent2}
-    else:
-        d = {WHITE: agent2, BLACK: agent1}
-    for color, agent in d.items():
-        agent.next_game(color)
-    return d
 
-def make_plays(agent1, agent2, n_games=1, print_freq=50):
-    agent_order = (agent1, agent2)
-    wins = [0, 0]
-    agent_idx = lambda ag: agent_order.index(ag)
-    
-    agents = assign_agent_sides(*agent_order)
-
-    observation, info = env.reset()
-    agent_color = info["current_agent"]
-
-    agent = agents[agent_color]
+def train_agent(agent, n_games=1000, eval_agent=None, eval_freq=1000, eval_games=100, print_freq=50):
 
     t = time.time()
-    # env.render()
+    total_loss, total_turns = 0.0, 0
 
-    game_idx = 1
-    for i in count():
-        roll = info["roll"]
+    for game_idx in range(n_games):
+        observation, info = env.reset()
+        color = info["current_agent"]
+        game_turns = 1
 
-        # print("Current player={} ({} - {}) | Roll={}".format(agent.color, TOKEN[agent.color], COLORS[agent.color], roll))
-        actions = env.get_valid_actions()
-        #print(actions)
-        action = agent.choose_best_action(actions, observation, env)
+        while True:
 
-        observation_next, reward, terminated, truncated, info = env.step(action)
-        #env.render()
+            actions = env.get_valid_actions()
+            action = agent.choose_best_action(actions, observation, env)
 
-        if terminated:
-            wins[agent_idx(agent)] += 1
-            opponent_color = WHITE if agent_color == BLACK else BLACK
-            agents[agent_color].reward(reward)
-            agents[opponent_color].reward(1-reward)
+            observation_next, reward, terminated, truncated, info = env.step(action)
 
-            tot = wins[WHITE] + wins[BLACK]
-            tot = tot if tot > 0 else 1
+            if terminated:
+                agent.step(observation, color, observation_next, reward)
 
-            if game_idx % print_freq == 0:
-                print("Game={} | Winner={} after {:<4} plays || Wins: {}={:<6}({:<5.1f}%) | {}={:<6}({:<5.1f}%) | Duration={:<.3f} sec".format(game_idx, agent.idx, i,
-                agent_order[0].name, wins[0], (wins[0] / tot) * 100,
-                agent_order[1].name, wins[1], (wins[1] / tot) * 100, time.time() - t))
-        if truncated:
-            print("Game={} truncated".format(game_idx))
-
-        if terminated or truncated:
-            game_idx += 1
-            if game_idx > n_games:
+            if terminated or truncated:
                 break
-            agents = assign_agent_sides(*agent_order)
-            observation, info = env.reset()
-        else:
-            observation = observation_next
-            agents[agent_color].reward()
 
-        agent_color = info["current_agent"]
-        agent = agents[agent_color]
-        
-    env.close()
+            agent.step(observation, color, observation_next, None)
+            observation = observation_next
+            color = info["current_agent"]
+            game_turns += 1
+
+        total_loss += agent.total_loss
+        total_turns += game_turns
+
+        if print_freq and (game_idx + 1) % print_freq == 0:
+            mean_loss = total_loss / max(total_turns, 1)
+            norm = agent.weight_norm()
+            print(f"Game {game_idx + 1:<6} done (avg turns: {total_turns//print_freq:<4}). Mean loss: {mean_loss:.8f}, weight norm: {norm:.6f}.")
+            total_loss, total_turns = 0.0, 0
+
+        # evaluate against the opponent agent if appropriate
+        if eval_agent is not None and game_idx % eval_freq == eval_freq - 1:
+            wins = play_two_agents(env, agent, eval_agent, eval_games)
+            elapsed = time.time() - t
+            print(f"After {game_idx + 1:<6} games done. Result against opponent: {wins[0]:<2}-{wins[1]:<2}. Elapsed {elapsed:.4f} s")
+
+        agent.next_game()
+
+    return agent
 
 
 if __name__ == '__main__':
@@ -82,11 +66,12 @@ if __name__ == '__main__':
     # random.seed(0)
     # np.random.seed(0)
 
-    start_t = time.time()
+    agent = LearningAgent(0, env.observation_space.shape, lr=1e-3, eps=0.05, weight_decay=1e-5, debug=False)
+    #agent.load_state()
+
+    opponent_agent = PubevalAgent(1)
+
     N = 10000
-    agent1 = RandomAgent(0)
-    agent2 = LearningAgent(1, env.observation_space.shape, lr=0.00005, eps=0.1, maxlen=300, gamma=0.7, init_rounds=100)
-#    agent2.load_state()
-    make_plays(agent1, agent2, N, 1)
-    agent2.save_state()
-    print(f"{N=} games took: {time.time() - start_t:.4f} s")
+    FREQ = 1000
+    train_agent(agent, N, opponent_agent, FREQ, 300, 100)
+    agent.save_state()
