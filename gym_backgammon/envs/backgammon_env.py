@@ -31,7 +31,7 @@ class BackgammonEnv(gym.Env):
             high[i] = 6.0
         high[194] = 7.5
 
-        self.observation_space = Box(low=low, high=high)
+        self.observation_space = Box(low=low, high=high, dtype= np.float32)
         # actions: [0-23] board fields, -1 and 24: off, 25:bar
         self.action_space = Sequence(Tuple([Discrete(27, start=-1), Discrete(27, start=-1)]))
         self.action_map = {i: i for i in range(-1, 25)}
@@ -58,7 +58,7 @@ class BackgammonEnv(gym.Env):
         self.game.execute_play(self.current_agent, internal_action)
 
         # get the board representation from the opponent player perspective (the current player has already performed the move)
-        observation = np.array(self.game.get_board_features(self.game.get_opponent(self.current_agent)))
+        observation = np.array(self.game.get_board_features(self.game.get_opponent(self.current_agent)), dtype=np.float32)
         
         reward = 0
         done = False
@@ -66,8 +66,6 @@ class BackgammonEnv(gym.Env):
         winner = self.game.get_winner()
 
         if winner is not None:
-            # practical-issues-in-temporal-difference-learning, pag.3
-            # ...leading to a final reward signal z. In the simplest case, z = 1 if White wins and z = 0 if Black wins
             if winner == WHITE:
                 reward = 1
             done = True

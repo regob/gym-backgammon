@@ -1,5 +1,6 @@
 import itertools
 from collections import namedtuple
+import numpy as np
 
 WHITE = 0
 BLACK = 1
@@ -1500,6 +1501,20 @@ class Backgammon:
         assert len(features_vector) == 198, print("Should be 198 instead of {}".format(len(features_vector)))
         return features_vector
 
+    def get_board_pubeval(self, current_player):
+        board = [self.bar[BLACK]]
+        for point in range(NUM_POINTS):
+            checkers, player = self.board[point]
+            board.append(checkers if player == current_player else -checkers)
+        board.append(self.bar[WHITE])
+        if current_player == BLACK:
+            board.reverse()
+
+        # opponent's bar should be negative
+        board[0] *= -1
+            
+        board.append(self.off[current_player])
+        return np.array(board)
 
 def assert_board(action, board, bar, off, game=None, old_board=None):
     sum_white = 0
