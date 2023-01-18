@@ -1,0 +1,28 @@
+
+* Temporal difference learning
+
+** Agent 1
+#+begin_src python
+  agent = LearningAgent(0, env.observation_space.shape, lr=3e-4, eps=0.05, weight_decay=1e-4, debug=False)
+#+end_src
+
+Performance against bugged pubeval agent:
+
+| Games  | Param change  | Pubeval     | win percentage |   gain |
+|--------+---------------+-------------+----------------+--------|
+| 20K    | -             | 1853 - 1147 |          61.8% | +0.235 |
+| 30K    | decay=1e-5    | 1949 - 1051 |          65.0% | +0.299 |
+| 50K    |               | 2108 - 892  |          70.3% | +0.405 |
+| 100K   |               | 2239 - 761  |          74.6% | +0.493 |
+| 150K   |               | 2200 - 800  |          73.3% | +0.466 |
+| 180K   | batch_size=16 | 2302 - 698  |          76.7% | +0.535 |
+| 210K   |               | 2317 - 683  |          77.2% |        |
+| +260K+ |               | 2298 - 702  |          76.6% |        |
+| +310K+ | batch_size=32 | 2146 - 854  |                |        |
+
+Performance against fixed pubeval agent:
+
+| Games | Param change | Pubeval | win percentage | gain |
+|-------+--------------+---------+----------------+------|
+| 210K  |              |         |                |      |
+Game=3000 | Winner=1 || Turns=101   || Wins: LearningAgent(0)=1415  (47.2 %) | PubevalAgent(1)=1585  (52.8 %) | Duration=294.236 sec

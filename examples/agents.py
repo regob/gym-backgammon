@@ -64,12 +64,13 @@ class PubevalAgent(PolicyAgent):
         
 
 class LearningAgent:
-    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, weight_decay=1e-6, debug=False):
+    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False):
         self.idx = idx
         self.observation_shape = observation_shape
         self.name = 'LearningAgent({})'.format(self.idx)
         self.eps = eps
         self.lr = lr
+        self.batch_size = batch_size
 
         # input layer neurons
         self.n_input = math.prod(self.observation_shape)
@@ -104,6 +105,8 @@ class LearningAgent:
         self.num_rounds = 1
         self.exploration_move = False
         self.debug = debug
+
+        self.playback_buffer = deque([], maxlen=300)
 
     def next_game(self):
         self.total_loss, self.num_turns = 0.0, 0
@@ -172,10 +175,15 @@ class LearningAgent:
                 reward = self.net(observation_next_tensor)
         else:
             reward = torch.FloatTensor([reward, 1.0 - reward]).reshape(1, -1).to(self.device)
+        self.playback_buffer.append((observation_tensor, reward))
 
-        prev_score = self.net(observation_tensor)
+        sample = random.sample(self.playback_buffer, min(self.batch_size, len(self.playback_buffer)))
+        X = torch.cat([x[0] for x in sample]).to(self.device)
+        Y = torch.cat([x[1] for x in sample]).to(self.device)
+        
+        prev_scores = self.net(X)
 
-        loss = self.loss(prev_score, reward)
+        loss = self.loss(prev_scores, Y)
         loss.backward()
         self.optim.step()
         self.optim.zero_grad()
@@ -184,7 +192,7 @@ class LearningAgent:
             with torch.no_grad():
                 better_score = self.net(observation_tensor).reshape(-1)
 
-            print(list(prev_score.detach().cpu().numpy()), list(better_score.cpu().numpy()), reward)
+            print(list(prev_scores.detach().cpu().numpy()), list(better_score.cpu().numpy()), reward)
 
         self.total_loss += loss.item()
         self.num_turns += 1

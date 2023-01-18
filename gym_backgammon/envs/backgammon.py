@@ -1514,7 +1514,7 @@ class Backgammon:
         board[0] *= -1
             
         board.append(self.off[current_player])
-        return np.array(board)
+        return np.array(board, dtype=np.int32)
 
 def assert_board(action, board, bar, off, game=None, old_board=None):
     sum_white = 0

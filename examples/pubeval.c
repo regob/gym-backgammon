@@ -80,14 +80,14 @@ float pubeval(int race, int pos[27]) {
 	int i;
 	float score;
 
-	if(pos[26]==15) return(99999999.);
-	/* all men off, best possible move */
+    if(pos[26]==15) return(99999999.);
+    /* all men off, best possible move */
 
-	setx(pos); /* sets input array x[] */
-	score = 0.0;
-	if(race) {  /* use race weights */
-	    for(i=0;i<122;++i) score += wr[i]*x[i];
-	}
+    setx(pos); /* sets input array x[] */
+    score = 0.0;
+    if(race) {  /* use race weights */
+        for(i=0;i<122;++i) score += wr[i]*x[i];
+    }
 	else {  /* use contact weights */
 	    for(i=0;i<122;++i) score += wc[i]*x[i];
 	}

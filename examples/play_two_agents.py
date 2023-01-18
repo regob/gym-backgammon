@@ -65,7 +65,8 @@ def play_two_agents(env, agent1, agent2, n_games=1, verbose=False, render=False)
 if __name__ == '__main__':
     env = gym.make('gym_backgammon:backgammon-v0', render_mode="human")
     
-    N = 100
-    agent1 = PubevalAgent(0)
-    agent2 = DumbevalAgent(1)
-    play_two_agents(env, agent1, agent2, N, True, True)
+    N = 3000
+    agent1 = LearningAgent(0, env.observation_space.shape, lr=3e-4, eps=0.05, weight_decay=1e-4, debug=False)
+    agent1.load_state()
+    agent2 = PubevalAgent(1)
+    play_two_agents(env, agent1, agent2, N, True, False)

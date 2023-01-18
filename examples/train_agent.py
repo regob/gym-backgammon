@@ -52,7 +52,8 @@ def train_agent(agent, n_games=1000, eval_agent=None, eval_freq=1000, eval_games
         if eval_agent is not None and game_idx % eval_freq == eval_freq - 1:
             wins = play_two_agents(env, agent, eval_agent, eval_games)
             elapsed = time.time() - t
-            print(f"After {game_idx + 1:<6} games done. Result against opponent: {wins[0]:<2}-{wins[1]:<2}. Elapsed {elapsed:.4f} s")
+            exp_gain = (wins[0] - wins[1]) / sum(wins)
+            print(f"After {game_idx + 1:<6} games done. Result against opponent: {wins[0]:<2}-{wins[1]:<2} ({exp_gain:.2f} gain). Elapsed {elapsed:.4f} s")
 
         agent.next_game()
 
@@ -66,12 +67,12 @@ if __name__ == '__main__':
     # random.seed(0)
     # np.random.seed(0)
 
-    agent = LearningAgent(0, env.observation_space.shape, lr=1e-3, eps=0.05, weight_decay=1e-5, debug=False)
-    #agent.load_state()
+    agent = LearningAgent(0, env.observation_space.shape, lr=1e-4, eps=0.05, batch_size=8, weight_decay=1e-6, debug=False)
+    agent.load_state()
 
     opponent_agent = PubevalAgent(1)
 
-    N = 10000
+    N = 50000
     FREQ = 1000
     train_agent(agent, N, opponent_agent, FREQ, 300, 100)
     agent.save_state()

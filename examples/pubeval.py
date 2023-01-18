@@ -9,7 +9,9 @@ from ctypes import cdll, c_float, c_int
 
 lib = cdll.LoadLibrary("./libpubeval.so")
 lib.pubeval.restype = c_float
-intp = ctypes.POINTER(ctypes.c_int)
+intp = ctypes.POINTER(ctypes.c_int32)
+lib.pubeval.argtypes = [ctypes.c_int32, intp]
+
 
 def is_race(board: np.ndarray):
     comp_pos = np.where(board[1:26] > 0)[0]
@@ -20,9 +22,7 @@ def is_race(board: np.ndarray):
 
 
 def pubeval(board: np.ndarray):
+    board = board.astype(np.int32)
     race = is_race(board)
-    np.set_printoptions(edgeitems=30, linewidth=100000, 
-                        formatter=dict(float=lambda x: "%.3g" % x))
     score = lib.pubeval(c_int(race), board.ctypes.data_as(intp))
-    #print(board, race, score)
     return score
