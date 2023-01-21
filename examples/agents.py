@@ -1,5 +1,7 @@
 import sys
 import random
+from functools import reduce
+from operator import mul
 import math
 from collections import deque
 import torch
@@ -74,7 +76,7 @@ class LearningAgent:
         self.batch_size = batch_size
 
         # input layer neurons
-        self.n_input = math.prod(self.observation_shape)
+        self.n_input = reduce(mul, self.observation_shape, 1)
         # output layer neurons (p_white wins, p_black wins)
         self.n_out = 2
         # hidden layer neurons
