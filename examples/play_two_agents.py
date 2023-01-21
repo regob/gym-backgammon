@@ -15,9 +15,6 @@ def play_two_agents(env, agent1, agent2, n_games=1, verbose=False, render=False)
     wins = [0, 0]
     start_t = time.time()
 
-    if verbose:
-        print(f"========== {agent1.name} vs {agent2.name} ==========")
-
     def assign_agent_colors():
         if random.random() > 0.5:
             return {WHITE: agent_order[0], BLACK: agent_order[1]}
@@ -33,7 +30,9 @@ def play_two_agents(env, agent1, agent2, n_games=1, verbose=False, render=False)
         num_turns = 1
         
         if render:
+            print(f"====== WHITE: {agents_by_color[WHITE].name} vs BLACK: {agents_by_color[BLACK].name} ==========")
             env.render()
+            print(f"Roll: {info['roll']}")
 
         
         while not finished:
@@ -44,6 +43,7 @@ def play_two_agents(env, agent1, agent2, n_games=1, verbose=False, render=False)
 
             if render:
                 env.render()
+                print(f"Roll: {info['roll']}")
 
             if terminated:
                 winning_agent = agents_by_color[color]
@@ -66,7 +66,9 @@ if __name__ == '__main__':
     env = gym.make('gym_backgammon:backgammon-v0', render_mode="human")
     
     N = 3000
-    agent1 = LearningAgent(0, env.observation_space.shape, lr=3e-4, eps=0.05, weight_decay=1e-4, debug=False)
+    agent1 = LearningAgent(0, env.observation_space.shape, lr=3e-4, eps=0.05, weight_decay=1e-4, debug=False, debug_freq=1)
     agent1.load_state()
     agent2 = PubevalAgent(1)
+    # agent2 = LearningAgent(1, env.observation_space.shape)
+    # agent2.load_state("weights/agent1_210k.pth")
     play_two_agents(env, agent1, agent2, N, True, False)

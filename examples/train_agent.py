@@ -67,7 +67,7 @@ if __name__ == '__main__':
     # random.seed(0)
     # np.random.seed(0)
 
-    agent = LearningAgent(0, env.observation_space.shape, lr=1e-4, eps=0.05, batch_size=8, weight_decay=1e-6, debug=False)
+    agent = LearningAgent(0, env.observation_space.shape, lr=5e-4, eps=0.00, batch_size=64, weight_decay=0.0, debug=True, maxlen=500)
     agent.load_state()
 
     opponent_agent = PubevalAgent(1)

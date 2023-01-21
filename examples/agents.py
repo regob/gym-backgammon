@@ -64,7 +64,8 @@ class PubevalAgent(PolicyAgent):
         
 
 class LearningAgent:
-    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False):
+    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False,
+                 debug_freq=100, maxlen=150):
         self.idx = idx
         self.observation_shape = observation_shape
         self.name = 'LearningAgent({})'.format(self.idx)
@@ -77,17 +78,17 @@ class LearningAgent:
         # output layer neurons (p_white wins, p_black wins)
         self.n_out = 2
         # hidden layer neurons
-        self.n_hidden = 100
+        self.n_hidden = 256
 
         self.layer1 = torch.nn.Linear(self.n_input, self.n_hidden)
-        self.layer2 = torch.nn.Linear(self.n_hidden, self.n_hidden)
+        # self.layer2 = torch.nn.Linear(self.n_hidden, self.n_hidden)
         self.layer3 = torch.nn.Linear(self.n_hidden, self.n_out)
 
         torch.nn.init.xavier_normal_(self.layer1.weight)
         torch.nn.init.xavier_normal_(self.layer3.weight)
 
         self.net = torch.nn.Sequential(
-            self.layer1, torch.nn.ReLU(), # torch.nn.Dropout(0.3),
+            self.layer1, torch.nn.ReLU(),
             #            self.layer2, torch.nn.ReLU(),
             self.layer3, torch.nn.Sigmoid(),
         )
@@ -98,15 +99,23 @@ class LearningAgent:
 
         self.optim = torch.optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9, weight_decay=weight_decay)
         self.optim.zero_grad()
-        self.loss = torch.nn.L1Loss()
+        self.loss = torch.nn.MSELoss()
 
         self.total_loss = 0.0
         self.num_turns = 0
         self.num_rounds = 1
         self.exploration_move = False
         self.debug = debug
+        self.debug_freq = debug_freq
 
-        self.playback_buffer = deque([], maxlen=300)
+        self.playback_buffer = deque([], maxlen=maxlen)
+
+    def _set_optim_par(self, name, value):
+        self.optim.param_groups[0][name] = value
+
+    def _set_lr(self, lr):
+        self.lr = lr
+        self._set_optim_par("lr", lr)
 
     def next_game(self):
         self.total_loss, self.num_turns = 0.0, 0
@@ -152,7 +161,7 @@ class LearningAgent:
                 best_action_idx = scores.argmax()
                 best_action = actions[best_action_idx]
 
-        if self.num_rounds % 100 == 0 and training and self.debug:
+        if self.num_rounds % self.debug_freq == 0 and training and self.debug:
             with torch.no_grad():
                 score = self.net(observation.reshape(1, -1).to(self.device))[0]
             print("Agent", "WHITE" if is_white else "BLACK", score)
@@ -177,7 +186,12 @@ class LearningAgent:
             reward = torch.FloatTensor([reward, 1.0 - reward]).reshape(1, -1).to(self.device)
         self.playback_buffer.append((observation_tensor, reward))
 
-        sample = random.sample(self.playback_buffer, min(self.batch_size, len(self.playback_buffer)))
+        if self.batch_size > 1:
+            sample = random.sample(self.playback_buffer, min(self.batch_size - 1, len(self.playback_buffer)))
+        else:
+            sample = []
+        sample.append((observation_tensor, reward))
+            
         X = torch.cat([x[0] for x in sample]).to(self.device)
         Y = torch.cat([x[1] for x in sample]).to(self.device)
         
@@ -192,7 +206,15 @@ class LearningAgent:
             with torch.no_grad():
                 better_score = self.net(observation_tensor).reshape(-1)
 
-            print(list(prev_scores.detach().cpu().numpy()), list(better_score.cpu().numpy()), reward)
+            pscores = list(prev_scores.detach().cpu().numpy())[-1]
+            print(f"[{pscores[0]:.8f}, {pscores[1]:.8f}]", end=" ")
+            bscore = list(better_score.cpu().numpy())
+            print(f"[{bscore[0]:.8f}, {bscore[1]:.8f}]", end=" ")
+            rew = list(reward[0].cpu().numpy())
+            print(f"[{int(rew[0])}, {int(rew[1])}]", end=" ")
+            w = self.net[0].weight[0][0].item()
+            print(f"{w:.8f}")
+
 
         self.total_loss += loss.item()
         self.num_turns += 1
