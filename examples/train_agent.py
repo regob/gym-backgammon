@@ -55,24 +55,44 @@ def train_agent(agent, n_games=1000, eval_agent=None, eval_freq=1000, eval_games
             exp_gain = (wins[0] - wins[1]) / sum(wins)
             print(f"After {game_idx + 1:<6} games done. Result against opponent: {wins[0]:<2}-{wins[1]:<2} ({exp_gain:.2f} gain). Elapsed {elapsed:.4f} s")
 
+            # save temp state
+            agent.save_state("temp_state.pth")
+
         agent.next_game()
 
     return agent
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("N", type=int)
+    parser.add_argument("--lr", default=5e-4, type=float)
+    parser.add_argument("--batch_size", default=64, type=int)
+    parser.add_argument("--weight_decay", default=0.0, type=float)
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--maxlen", default=500, type=int)
+    parser.add_argument("--eps", default=0.0, type=float)
+    parser.add_argument("--load_state", action="store_true")
+    parser.add_argument("--n_hidden", default=256, type=int)
+    args = parser.parse_args()
+    
     env = gym.make('gym_backgammon:backgammon-v0', render_mode="human")
-    # env = gym.make('gym_backgammon:backgammon-pixel-v0')
-    print(env.observation_space.shape)
-    # random.seed(0)
-    # np.random.seed(0)
 
-    agent = LearningAgent(0, env.observation_space.shape, lr=5e-4, eps=0.00, batch_size=64, weight_decay=0.0, debug=True, maxlen=500)
-    agent.load_state()
+    agent = LearningAgent(0,
+                          env.observation_space.shape,
+                          args.n_hidden,
+                          lr=args.lr,
+                          eps=args.eps,
+                          batch_size=args.batch_size,
+                          weight_decay=args.weight_decay,
+                          debug=args.debug,
+                          maxlen=args.maxlen)
+    if args.load_state:
+        agent.load_state()
 
     opponent_agent = PubevalAgent(1)
 
-    N = 50000
+    N = args.N
     FREQ = 1000
     train_agent(agent, N, opponent_agent, FREQ, 300, 100)
     agent.save_state()

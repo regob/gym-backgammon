@@ -66,7 +66,7 @@ class PubevalAgent(PolicyAgent):
         
 
 class LearningAgent:
-    def __init__(self, idx, observation_shape, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False,
+    def __init__(self, idx, observation_shape, n_hidden, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False,
                  debug_freq=100, maxlen=150):
         self.idx = idx
         self.observation_shape = observation_shape
@@ -80,7 +80,7 @@ class LearningAgent:
         # output layer neurons (p_white wins, p_black wins)
         self.n_out = 2
         # hidden layer neurons
-        self.n_hidden = 256
+        self.n_hidden = n_hidden
 
         self.layer1 = torch.nn.Linear(self.n_input, self.n_hidden)
         # self.layer2 = torch.nn.Linear(self.n_hidden, self.n_hidden)
