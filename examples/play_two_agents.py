@@ -66,7 +66,7 @@ if __name__ == '__main__':
     env = gym.make('gym_backgammon:backgammon-v0', render_mode="human")
     
     N = 3000
-    agent1 = LearningAgent(0, env.observation_space.shape, lr=3e-4, eps=0.05, weight_decay=1e-4, debug=False, debug_freq=1)
+    agent1 = LearningAgent(0, env.observation_space.shape, 256, debug=False)
     agent1.load_state()
     agent2 = PubevalAgent(1)
     # agent2 = LearningAgent(1, env.observation_space.shape)
