@@ -74,6 +74,7 @@ if __name__ == '__main__':
     parser.add_argument("--eps", default=0.0, type=float)
     parser.add_argument("--load_state", action="store_true")
     parser.add_argument("--n_hidden", default=256, type=int)
+    parser.add_argument("--l1loss", action="store_true")
     args = parser.parse_args()
     
     env = gym.make('gym_backgammon:backgammon-v0', render_mode="human")
@@ -86,7 +87,8 @@ if __name__ == '__main__':
                           batch_size=args.batch_size,
                           weight_decay=args.weight_decay,
                           debug=args.debug,
-                          maxlen=args.maxlen)
+                          maxlen=args.maxlen,
+                          mseloss=not args.l1loss)
     if args.load_state:
         agent.load_state()
 

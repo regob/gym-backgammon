@@ -66,8 +66,7 @@ class PubevalAgent(PolicyAgent):
         
 
 class LearningAgent:
-    def __init__(self, idx, observation_shape, n_hidden, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False,
-                 debug_freq=100, maxlen=150):
+    def __init__(self, idx, observation_shape, n_hidden, lr=0.05, eps=0.1, weight_decay=1e-6, batch_size=16, debug=False, debug_freq=100, maxlen=150, mseloss=True):
         self.idx = idx
         self.observation_shape = observation_shape
         self.name = 'LearningAgent({})'.format(self.idx)
@@ -101,7 +100,10 @@ class LearningAgent:
 
         self.optim = torch.optim.SGD(self.net.parameters(), lr=self.lr, momentum=0.9, weight_decay=weight_decay)
         self.optim.zero_grad()
-        self.loss = torch.nn.MSELoss()
+        if mseloss:
+            self.loss = torch.nn.MSELoss()
+        else:
+            self.loss = torch.nn.L1Loss()
 
         self.total_loss = 0.0
         self.num_turns = 0
