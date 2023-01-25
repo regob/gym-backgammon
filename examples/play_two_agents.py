@@ -1,9 +1,10 @@
-import gymnasium as gym
+import argparse
 import time
 from itertools import count
 import random
 import numpy as np
 
+import gymnasium as gym
 from gym_backgammon.envs.backgammon import WHITE, BLACK, COLORS, TOKEN
 from agents import RandomAgent, LearningAgent, PubevalAgent, DumbevalAgent
 
@@ -63,12 +64,15 @@ def play_two_agents(env, agent1, agent2, n_games=1, verbose=False, render=False)
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("N", type=int)
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument("--n_hidden", default=256, type=int)
+    args = parser.parse_args()
+
     env = gym.make('gym_backgammon:backgammon-v0', render_mode="human")
     
-    N = 3000
-    agent1 = LearningAgent(0, env.observation_space.shape, 256, debug=False)
+    agent1 = LearningAgent(0, env.observation_space.shape, args.n_hidden, debug=args.debug)
     agent1.load_state()
     agent2 = PubevalAgent(1)
-    # agent2 = LearningAgent(1, env.observation_space.shape)
-    # agent2.load_state("weights/agent1_210k.pth")
-    play_two_agents(env, agent1, agent2, N, True, False)
+    play_two_agents(env, agent1, agent2, args.N, True, False)
